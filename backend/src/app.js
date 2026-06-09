@@ -38,7 +38,14 @@ app.use(
   }),
 );
 
-app.use('/api', routes);
+// Mount the API under both the bare prefix and the platform service prefix
+// ("/_/backend"). This makes the backend reachable whether the hosting platform
+// strips its routePrefix before forwarding (request arrives as /api/...) or
+// forwards the full path (arrives as /_/backend/api/...). Locally and behind
+// nginx the bare /api mount is used.
+for (const prefix of ['/api', '/_/backend/api']) {
+  app.use(prefix, routes);
+}
 
 app.use(notFound);
 app.use(errorHandler);
