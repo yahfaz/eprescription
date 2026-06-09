@@ -138,43 +138,46 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 ---
 
-## Deploying to Vercel
+## Deploying as multiple services (`app.json`)
 
-`vercel.json` configures Vercel to deploy both services from this monorepo:
+`app.json` declares the two services for a multi-service hosting platform:
 
-- the **frontend** is built with Vite and served as static assets, and
-- the **backend** Express app runs as a serverless function
-  (`backend/api/index.js` exports the app; `app.listen` is only used for
-  traditional hosting via `src/server.js`).
+```json
+{
+  "experimentalServices": {
+    "frontend": { "root": "frontend", "routePrefix": "/", "framework": "vite" },
+    "backend":  { "root": "backend",  "routePrefix": "/_/backend" }
+  }
+}
+```
 
-Routing: requests to `/api/*` go to the serverless API; everything else falls
-back to the SPA's `index.html`.
+- The **frontend** (Vite) is served at `/`.
+- The **backend** (Express) is served under the `/_/backend` route prefix and
+  runs as a normal long-lived service (`npm start` → `src/server.js`).
+- The SPA calls the API at `/_/backend/api/...`. The backend mounts its routes
+  under **both** `/api` and `/_/backend/api`, so it works whether the platform
+  strips the prefix before forwarding or passes the full path through.
 
-**Before deploying, in the Vercel project settings → Environment Variables, set
-at minimum:**
+**Set these environment variables for the backend service:**
 
 | Variable | Value |
 | -------- | ----- |
 | `DATABASE_URL` | A managed Postgres connection string (Neon, Supabase, RDS…) |
 | `PGSSL` | `true` (managed Postgres usually requires SSL) |
-| `DB_POOL_MAX` | `1`–`5` (serverless: one pool per instance) |
+| `DB_POOL_MAX` | `5` (or lower if using a connection pooler) |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EMAIL_TOKEN_SECRET` | strong random secrets |
 | `EMAIL_TRANSPORT` + `SMTP_*` | a real SMTP provider |
 | `APP_PUBLIC_URL` | your deployed URL (used in email links) |
 | `CORS_ORIGINS` | your deployed URL |
 
-> **Database note.** Serverless functions are short-lived and scale
-> horizontally, so use a Postgres provider with connection pooling (Neon /
-> Supabase pooler / PgBouncer) and keep `DB_POOL_MAX` low. Run the schema once
-> against your database (`npm run db:migrate`, optionally `db:seed`) before the
-> first request — serverless functions do not run migrations on boot the way
-> `docker compose` does.
+> **Database note.** Run the schema once against your database
+> (`npm run db:migrate`, optionally `npm run db:seed`) before first use — the
+> service does not run migrations on boot the way `docker compose` does. With
+> Neon, run migrations against the **direct** (non-`-pooler`) endpoint and point
+> the running app at the **pooled** endpoint.
 
-```bash
-npm i -g vercel
-vercel            # preview deploy
-vercel --prod     # production deploy
-```
+Docker Compose (`docker compose up --build`) remains fully supported for
+self-hosting; nginx proxies both `/_/backend/` and `/api/` to the API.
 
 ## API overview
 

@@ -1,5 +1,7 @@
 // Lightweight fetch wrapper with JWT access/refresh handling.
-const BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+// The backend service is mounted under the "/_/backend" route prefix by the
+// hosting platform (see app.json); override with VITE_API_BASE_URL if needed.
+const BASE = import.meta.env.VITE_API_BASE_URL || '/_/backend/api';
 
 const store = {
   get accessToken() {
