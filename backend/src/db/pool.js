@@ -19,7 +19,10 @@ const poolConfig = env.database.url
 
 const pool = new Pool({
   ...poolConfig,
-  max: 20,
+  // Keep this small in serverless environments (e.g. Vercel), where each
+  // concurrent function instance maintains its own pool. Tune via DB_POOL_MAX
+  // and prefer a connection pooler (Neon, Supabase, PgBouncer) in that case.
+  max: parseInt(process.env.DB_POOL_MAX || '20', 10),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
 });

@@ -138,6 +138,44 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 ---
 
+## Deploying to Vercel
+
+`vercel.json` configures Vercel to deploy both services from this monorepo:
+
+- the **frontend** is built with Vite and served as static assets, and
+- the **backend** Express app runs as a serverless function
+  (`backend/api/index.js` exports the app; `app.listen` is only used for
+  traditional hosting via `src/server.js`).
+
+Routing: requests to `/api/*` go to the serverless API; everything else falls
+back to the SPA's `index.html`.
+
+**Before deploying, in the Vercel project settings → Environment Variables, set
+at minimum:**
+
+| Variable | Value |
+| -------- | ----- |
+| `DATABASE_URL` | A managed Postgres connection string (Neon, Supabase, RDS…) |
+| `PGSSL` | `true` (managed Postgres usually requires SSL) |
+| `DB_POOL_MAX` | `1`–`5` (serverless: one pool per instance) |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `EMAIL_TOKEN_SECRET` | strong random secrets |
+| `EMAIL_TRANSPORT` + `SMTP_*` | a real SMTP provider |
+| `APP_PUBLIC_URL` | your deployed URL (used in email links) |
+| `CORS_ORIGINS` | your deployed URL |
+
+> **Database note.** Serverless functions are short-lived and scale
+> horizontally, so use a Postgres provider with connection pooling (Neon /
+> Supabase pooler / PgBouncer) and keep `DB_POOL_MAX` low. Run the schema once
+> against your database (`npm run db:migrate`, optionally `db:seed`) before the
+> first request — serverless functions do not run migrations on boot the way
+> `docker compose` does.
+
+```bash
+npm i -g vercel
+vercel            # preview deploy
+vercel --prod     # production deploy
+```
+
 ## API overview
 
 Base path: `/api`. All routes except `auth/*` (and `health`) require a
