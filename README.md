@@ -113,6 +113,32 @@ npm run dev               # web on http://localhost:5173 (proxies /api to :4000)
 | `dr.smith@riverbend.health`    | prescriber  |
 | `nurse.lee@riverbend.health`   | nurse       |
 
+### Bootstrapping a real admin account
+
+For a production deployment you typically skip the demo seed and create your own
+verified admin instead:
+
+```bash
+cd backend
+npm run create-admin -- \
+  --email you@practice.com \
+  --password "ChooseAStrongPassword123!" \
+  --name "Jane Doe" \
+  --practice "Your Medical Practice"   # [--role admin|prescriber|...]
+```
+
+The account is created **already verified and active**, so you can log in
+immediately — no email step required. Re-running with the same email resets that
+user's password and re-verifies it (idempotent). Values can also be supplied via
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` / `ADMIN_PRACTICE` / `ADMIN_ROLE`.
+
+### Skipping email verification during setup
+
+If you don't have SMTP configured yet, set `AUTO_VERIFY_EMAIL=true` and new
+self-service registrations are marked verified immediately (no verification
+email sent), so users can sign up and log in right away. **Leave this `false` in
+production** and configure real SMTP instead.
+
 ---
 
 ## Configuration

@@ -70,15 +70,19 @@ export const register = asyncHandler(async (req, res) => {
     const passwordHash = await hashPassword(password);
     const { rows } = await client.query(
       `INSERT INTO users
-         (practice_id, email, password_hash, first_name, last_name, role, npi, dea_number, state_license, phone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         (practice_id, email, password_hash, first_name, last_name, role, npi, dea_number, state_license, phone, email_verified)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
-      [resolvedPracticeId, email, passwordHash, firstName, lastName, role, npi || null, deaNumber || null, stateLicense || null, phone || null],
+      [resolvedPracticeId, email, passwordHash, firstName, lastName, role, npi || null, deaNumber || null, stateLicense || null, phone || null, env.email.autoVerify],
     );
     return rows[0];
   });
 
-  await issueVerificationEmail(user);
+  // With AUTO_VERIFY_EMAIL enabled the account is usable immediately and no
+  // verification email is sent; otherwise send the verification link.
+  if (!env.email.autoVerify) {
+    await issueVerificationEmail(user);
+  }
   await recordAudit({
     userId: user.id,
     practiceId: user.practice_id,
@@ -90,7 +94,9 @@ export const register = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({
-    message: 'Account created. Check your email to verify your address before logging in.',
+    message: env.email.autoVerify
+      ? 'Account created. You can now log in.'
+      : 'Account created. Check your email to verify your address before logging in.',
     user: publicUser(user),
   });
 });
