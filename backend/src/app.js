@@ -14,14 +14,30 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(helmet());
+
+// Decide whether a given request Origin is allowed. Same-origin requests
+// (frontend + API served from one host, e.g. behind Vercel's /_/backend route
+// prefix or nginx) are always allowed; CORS_ORIGINS adds explicit cross-origin
+// frontends (e.g. a separate EMR), and "*" allows any origin.
+function isAllowedOrigin(req, origin) {
+  if (!origin) return true; // non-browser clients / same-origin without Origin
+  if (env.corsOrigins.includes('*')) return true;
+  if (env.corsOrigins.includes(origin)) return true;
+  try {
+    const reqHost = req.get('host');
+    if (reqHost && new URL(origin).host === reqHost) return true; // same-origin
+  } catch {
+    /* malformed Origin header */
+  }
+  return false;
+}
+
 app.use(
-  cors({
-    origin: (origin, cb) => {
-      // Allow same-origin / curl (no origin) and configured frontends
-      if (!origin || env.corsOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error(`Origin ${origin} not allowed by CORS`));
-    },
-    credentials: true,
+  cors((req, callback) => {
+    const origin = req.get('origin');
+    // origin:true reflects the caller's Origin (required when credentials:true);
+    // origin:false simply omits CORS headers so the browser blocks it — no 500.
+    callback(null, { origin: isAllowedOrigin(req, origin), credentials: true });
   }),
 );
 app.use(express.json({ limit: '1mb' }));
