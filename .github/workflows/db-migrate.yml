@@ -1,0 +1,71 @@
+name: Database migrate
+
+# Runs the Postgres schema migration (and optionally seed / admin creation)
+# against your managed database from a GitHub-hosted runner — useful because
+# the runner has outbound network access to Neon/Supabase/etc.
+#
+# Setup (one time):
+#   Repo → Settings → Secrets and variables → Actions → New repository secret
+#     Name:  DATABASE_URL
+#     Value: your Neon connection string. Use the DIRECT (non "-pooler")
+#            endpoint for DDL, e.g.
+#            postgresql://USER:PASS@ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require
+#
+# Run it:
+#   Repo → Actions → "Database migrate" → Run workflow
+#     - seed:        load demo practice/users/medications (optional)
+#     - admin_email/admin_password: create a verified admin (optional)
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Also load demo seed data (demo accounts, meds, pharmacies)"
+        type: boolean
+        default: false
+      admin_email:
+        description: "Optional: email for a verified admin account to create"
+        type: string
+        default: ""
+      admin_password:
+        description: "Optional: password for that admin (min 8 chars)"
+        type: string
+        default: ""
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PGSSL: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify DATABASE_URL secret is set
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL secret is not set. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "DATABASE_URL is set (value hidden)."
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Run schema migration
+        run: npm run db:migrate
+
+      - name: Load demo seed data
+        if: ${{ inputs.seed }}
+        run: npm run db:seed
+
+      - name: Create verified admin account
+        if: ${{ inputs.admin_email != '' && inputs.admin_password != '' }}
+        run: npm run create-admin -- --email "${{ inputs.admin_email }}" --password "${{ inputs.admin_password }}"
