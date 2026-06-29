@@ -113,6 +113,32 @@ npm run dev               # web on http://localhost:5173 (proxies /api to :4000)
 | `dr.smith@riverbend.health`    | prescriber  |
 | `nurse.lee@riverbend.health`   | nurse       |
 
+### Bootstrapping a real admin account
+
+For a production deployment you typically skip the demo seed and create your own
+verified admin instead:
+
+```bash
+cd backend
+npm run create-admin -- \
+  --email you@practice.com \
+  --password "ChooseAStrongPassword123!" \
+  --name "Jane Doe" \
+  --practice "Your Medical Practice"   # [--role admin|prescriber|...]
+```
+
+The account is created **already verified and active**, so you can log in
+immediately — no email step required. Re-running with the same email resets that
+user's password and re-verifies it (idempotent). Values can also be supplied via
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` / `ADMIN_PRACTICE` / `ADMIN_ROLE`.
+
+### Skipping email verification during setup
+
+If you don't have SMTP configured yet, set `AUTO_VERIFY_EMAIL=true` and new
+self-service registrations are marked verified immediately (no verification
+email sent), so users can sign up and log in right away. **Leave this `false` in
+production** and configure real SMTP instead.
+
 ---
 
 ## Configuration
@@ -175,6 +201,20 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 > service does not run migrations on boot the way `docker compose` does. With
 > Neon, run migrations against the **direct** (non-`-pooler`) endpoint and point
 > the running app at the **pooled** endpoint.
+
+### Migrating from GitHub (no local machine)
+
+If you can't run the migration locally, use the included **“Database migrate”**
+GitHub Actions workflow (`.github/workflows/db-migrate.yml`):
+
+1. Add a repository secret `DATABASE_URL` (Settings → Secrets and variables →
+   Actions) set to your Neon **direct** endpoint connection string.
+2. Go to **Actions → Database migrate → Run workflow**. Optionally tick `seed`
+   to load demo accounts, or fill `admin_email`/`admin_password` to create a
+   verified admin in the same run.
+
+The runner has outbound access to Neon, so this provisions the schema without
+needing a local environment.
 
 Docker Compose (`docker compose up --build`) remains fully supported for
 self-hosting; nginx proxies both `/_/backend/` and `/api/` to the API.

@@ -54,6 +54,10 @@ const env = {
       pass: process.env.SMTP_PASS,
     },
     appPublicUrl: process.env.APP_PUBLIC_URL || 'http://localhost:5173',
+    // When true, new registrations are marked email-verified immediately and no
+    // verification email is required. Useful for initial setup / environments
+    // without SMTP configured. Leave false in production.
+    autoVerify: String(process.env.AUTO_VERIFY_EMAIL).toLowerCase() === 'true',
   },
 
   rxnorm: {
