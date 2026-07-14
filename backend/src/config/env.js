@@ -58,6 +58,13 @@ const env = {
     // verification email is required. Useful for initial setup / environments
     // without SMTP configured. Leave false in production.
     autoVerify: String(process.env.AUTO_VERIFY_EMAIL).toLowerCase() === 'true',
+    // Email verification is only ENFORCED when a real SMTP transport is
+    // configured and auto-verify isn't forced on. Without SMTP no verification
+    // email is actually delivered, so requiring it would strand users — we skip
+    // the whole verification step in that case (register verified, allow login).
+    requireVerification:
+      (process.env.EMAIL_TRANSPORT || 'stream') === 'smtp' &&
+      String(process.env.AUTO_VERIFY_EMAIL).toLowerCase() !== 'true',
   },
 
   rxnorm: {
