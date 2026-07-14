@@ -2,6 +2,7 @@ import { query } from '../db/pool.js';
 import { verifyAccessToken } from '../utils/tokens.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
+import env from '../config/env.js';
 
 /**
  * Authenticates a request from the `Authorization: Bearer <token>` header.
@@ -31,7 +32,9 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
   const user = rows[0];
   if (!user) throw ApiError.unauthorized('User no longer exists');
   if (!user.is_active) throw ApiError.forbidden('Account is deactivated');
-  if (!user.email_verified) throw ApiError.forbidden('Email address not verified');
+  if (env.email.requireVerification && !user.email_verified) {
+    throw ApiError.forbidden('Email address not verified');
+  }
 
   req.user = user;
   next();
