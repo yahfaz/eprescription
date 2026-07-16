@@ -11,6 +11,7 @@ import Patients from './pages/Patients.jsx';
 import PatientDetail from './pages/PatientDetail.jsx';
 import Prescriptions from './pages/Prescriptions.jsx';
 import NewPrescription from './pages/NewPrescription.jsx';
+import Inbox from './pages/Inbox.jsx';
 import PrescriptionDetail from './pages/PrescriptionDetail.jsx';
 import Pharmacies from './pages/Pharmacies.jsx';
 import Admin from './pages/Admin.jsx';
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="prescriptions" element={<Prescriptions />} />
         <Route path="prescriptions/new" element={<NewPrescription />} />
         <Route path="prescriptions/:id" element={<PrescriptionDetail />} />
+        <Route path="inbox" element={<Inbox />} />
         <Route path="pharmacies" element={<Pharmacies />} />
         <Route path="admin" element={<Admin />} />
       </Route>

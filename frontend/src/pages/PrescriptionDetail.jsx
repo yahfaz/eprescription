@@ -58,6 +58,16 @@ export default function PrescriptionDetail() {
     });
   };
 
+  const setPA = (status) => act(async () => {
+    await api(`/prescriptions/${id}/prior-auth`, { method: 'POST', body: { status } });
+    setMsg({ type: 'success', text: `Prior authorization: ${status.replace('_', ' ')}.` });
+  });
+
+  const requestRenewal = () => act(async () => {
+    await api('/renewals', { method: 'POST', body: { prescriptionId: id } });
+    setMsg({ type: 'success', text: 'Renewal request added to the Inbox.' });
+  });
+
   if (!rx) return <div className="center-loading">Loading…</div>;
   const canPrescribe = hasRole('admin', 'prescriber');
   const isDraft = ['draft', 'pending_review'].includes(rx.status);
@@ -85,8 +95,20 @@ export default function PrescriptionDetail() {
               <dt>Diagnosis</dt><dd>{rx.diagnosis_code || '—'}</dd>
               <dt>Prescriber</dt><dd>{rx.prescriber_first_name} {rx.prescriber_last_name}</dd>
               <dt>Pharmacy</dt><dd>{rx.pharmacy_name || '— (none selected)'}</dd>
+              <dt>Prior auth</dt><dd>{(rx.prior_auth_status || 'not_required').replace('_', ' ')}{rx.prior_auth_number ? ` (${rx.prior_auth_number})` : ''}</dd>
               {rx.network_message_id && <><dt>Network ID</dt><dd>{rx.network_message_id}</dd></>}
             </dl>
+            {canPrescribe && (
+              <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Electronic prior authorization (ePA)</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <button className="secondary sm" disabled={busy} onClick={() => setPA('initiated')}>Start PA</button>
+                  <button className="secondary sm" disabled={busy} onClick={() => setPA('approved')}>Mark approved</button>
+                  <button className="secondary sm" disabled={busy} onClick={() => setPA('denied')}>Mark denied</button>
+                  <button className="secondary sm" disabled={busy} onClick={requestRenewal}>Request renewal</button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card">
