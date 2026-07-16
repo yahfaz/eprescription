@@ -2,6 +2,7 @@ import { query } from '../db/pool.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { auditFromRequest } from '../services/audit.service.js';
+import { getExternalHistory } from '../services/medicationHistory.service.js';
 
 const PATIENT_COLUMNS = `id, practice_id, external_emr_id, mrn, first_name, last_name,
   date_of_birth, sex, phone, email, address_line1, address_line2, city, state,
@@ -111,6 +112,41 @@ export const deactivatePatient = asyncHandler(async (req, res) => {
   if (rowCount === 0) throw ApiError.notFound('Patient not found');
   await auditFromRequest(req, { action: 'patient.deactivate', entityType: 'patient', entityId: req.params.id });
   res.json({ message: 'Patient deactivated' });
+});
+
+// ── GET /patients/:id/medication-history ──────────────────────────────────────
+// Consolidated view: this practice's prescriptions + simulated external fills.
+export const medicationHistory = asyncHandler(async (req, res) => {
+  await assertPatientInPractice(req.params.id, req.user.practice_id);
+
+  const { rows: internal } = await query(
+    `SELECT p.drug_name, p.sig, p.quantity, p.quantity_unit, p.days_supply, p.status,
+            p.dea_schedule, p.written_date, p.created_at,
+            u.first_name AS prescriber_first_name, u.last_name AS prescriber_last_name
+       FROM prescriptions p
+       JOIN users u ON u.id = p.prescriber_id
+      WHERE p.patient_id = $1
+      ORDER BY p.created_at DESC`,
+    [req.params.id],
+  );
+
+  const internalItems = internal.map((r) => ({
+    source: 'internal',
+    drugName: r.drug_name,
+    sig: r.sig,
+    quantity: r.quantity,
+    quantityUnit: r.quantity_unit,
+    daysSupply: r.days_supply,
+    status: r.status,
+    deaSchedule: r.dea_schedule,
+    prescriber: `${r.prescriber_first_name} ${r.prescriber_last_name}`,
+    date: (r.written_date || r.created_at)?.toISOString?.().slice(0, 10) || String(r.written_date || '').slice(0, 10),
+  }));
+
+  const external = getExternalHistory(req.params.id).map((e) => ({ ...e, date: e.lastFillDate }));
+
+  const medications = [...internalItems, ...external].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  res.json({ data: medications, counts: { internal: internalItems.length, external: external.length } });
 });
 
 // ── Allergies ────────────────────────────────────────────────────────────────

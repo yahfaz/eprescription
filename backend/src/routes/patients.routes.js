@@ -10,6 +10,7 @@ router.use(authenticate);
 
 router.get('/', ctrl.listPatients);
 router.get('/:id', ctrl.getPatient);
+router.get('/:id/medication-history', ctrl.medicationHistory);
 router.post('/', requireRole('admin', 'prescriber', 'nurse', 'staff'), validate(createPatientSchema), ctrl.createPatient);
 router.patch('/:id', requireRole('admin', 'prescriber', 'nurse', 'staff'), validate(updatePatientSchema), ctrl.updatePatient);
 router.delete('/:id', requireRole('admin', 'prescriber'), ctrl.deactivatePatient);

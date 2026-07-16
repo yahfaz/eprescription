@@ -289,6 +289,10 @@ DO $$ BEGIN
   CREATE TYPE renewal_status AS ENUM ('pending','approved','denied');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- EPCS-style two-factor (TOTP) fields on users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
+
 -- Electronic prior authorization (ePA) fields on prescriptions
 ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS prior_auth_status prior_auth_status NOT NULL DEFAULT 'not_required';
 ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS prior_auth_number TEXT;

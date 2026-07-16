@@ -34,9 +34,10 @@ EPCS with PDMP checks, RTPB / price transparency, ePA, and medication history.
 | **RxRenewal / renewal inbox** | Pharmacy-initiated refill authorization requests, approved into a new Rx | ✅ (inbox + approve→draft) / 🔒 real pharmacy-originated messages |
 | **CancelRx** | Tell the pharmacy to discontinue a prescription | ✅ (internal) / 🔒 network CancelRx |
 | Clinical decision support | Allergy (incl. class cross-reactivity), duplicate therapy, drug–drug interactions | ✅ (interactions via public RxNorm; licensed DB is the production upgrade) |
-| **Medication history** | Aggregated fill history to inform prescribing | ✅ per-patient Rx history / 🔒 network+PBM aggregated history |
+| **Medication history** | Aggregated fill history to inform prescribing | ✅ consolidated view / 🟡 external pharmacy/PBM fills simulated / 🔒 live network+PBM feed |
 | Controlled substances awareness | DEA schedule flags; DEA number required to sign CII–CV | ✅ |
-| **EPCS** (2-factor controlled-substance signing) | Identity-proofed, two-factor signing ceremony | 🔒 requires EPCS certification & audit |
+| **EPCS** two-factor signing | Two-factor (TOTP) code required at the moment of signing a controlled substance | ✅ two-factor signing ceremony / 🔒 identity proofing + certified EPCS audit |
+| **Reporting / analytics** | Prescribing dashboards (status, controlled mix, top meds, per-prescriber, pending work) | ✅ |
 | **PDMP** integration | State prescription-drug-monitoring lookups at prescribing | 🔒 requires state PDMP agreements |
 | RxChange / RxTransfer / RxFill | Pharmacy questions, transfers, fill status | 🔒 network transactions |
 | Formulary & Benefit file | Payer formulary/coverage reference data | 🟡 folded into RTPB estimate |
@@ -55,6 +56,18 @@ EPCS with PDMP checks, RTPB / price transparency, ePA, and medication history.
   `POST /api/prescriptions/:id/prior-auth`, with controls on the Rx detail page.
 - **RxRenewal inbox** — `renewal_requests` table, `/api/renewals` (create / list
   / respond), and an **Inbox** page; approving creates a linked draft Rx.
+
+## Tier 2 additions
+
+- **EPCS two-factor signing** — TOTP enrollment (`/auth/2fa/setup|enable|disable`,
+  RFC 6238, no external deps) under a new **Security** page; a valid code is
+  required to sign any DEA Schedule II–V prescription.
+- **Medication history** — `GET /patients/:id/medication-history` consolidates
+  this practice's prescriptions with a simulated external pharmacy/PBM fill
+  history (`services/medicationHistory.service.js`); shown on the patient page.
+- **Reporting / analytics** — `GET /reports/summary` + a **Reports** dashboard
+  (by status, controlled mix, top medications, per-prescriber, pending renewals
+  and prior authorizations).
 
 > After deploying, re-run the **Database migrate** GitHub Action (or
 > `npm run db:migrate`) so the new tables/columns are applied — the schema

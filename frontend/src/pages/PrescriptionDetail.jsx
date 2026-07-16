@@ -9,6 +9,7 @@ export default function PrescriptionDetail() {
   const [rx, setRx] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [overrides, setOverrides] = useState({}); // checkType -> reason
+  const [otp, setOtp] = useState(''); // EPCS two-factor code for controlled substances
   const [msg, setMsg] = useState(null); // {type, text}
   const [busy, setBusy] = useState(false);
 
@@ -40,7 +41,12 @@ export default function PrescriptionDetail() {
     if (critical.some((a) => !overrides[a.checkType] || overrides[a.checkType].length < 3)) {
       throw new Error('Provide an override reason (min 3 chars) for each critical alert before signing.');
     }
+    if (rx.dea_schedule >= 2) {
+      if (!/^\d{6}$/.test(otp)) throw new Error('Enter your 6-digit two-factor code to sign this controlled substance.');
+      body.otpToken = otp;
+    }
     await api(`/prescriptions/${id}/sign`, { method: 'POST', body });
+    setOtp('');
     setMsg({ type: 'success', text: 'Prescription signed.' });
   });
 
@@ -127,6 +133,13 @@ export default function PrescriptionDetail() {
               </div>
             ))}
 
+            {canPrescribe && isDraft && rx.dea_schedule >= 2 && (
+              <div className="field" style={{ marginTop: 12 }}>
+                <label>EPCS two-factor code (controlled substance)</label>
+                <input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="6-digit code" maxLength={6} />
+                <div className="muted" style={{ fontSize: 12 }}>Enroll under Security if you haven’t set up two-factor.</div>
+              </div>
+            )}
             {canPrescribe && (
               <div className="row" style={{ marginTop: 16 }}>
                 {isDraft && <button disabled={busy} onClick={sign}>Sign prescription</button>}

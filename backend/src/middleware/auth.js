@@ -25,7 +25,7 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
 
   const { rows } = await query(
     `SELECT id, practice_id, email, first_name, last_name, role,
-            npi, dea_number, email_verified, is_active
+            npi, dea_number, email_verified, is_active, totp_enabled
        FROM users WHERE id = $1`,
     [payload.sub],
   );

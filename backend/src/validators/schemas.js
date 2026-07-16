@@ -91,6 +91,8 @@ export const signPrescriptionSchema = z.object({
     .array(z.object({ checkType: z.string(), reason: z.string().min(3).max(500) }))
     .optional()
     .default([]),
+  // EPCS two-factor code, required only when signing controlled substances
+  otpToken: z.string().regex(/^\d{6}$/).optional(),
 });
 
 export const cancelPrescriptionSchema = z.object({
