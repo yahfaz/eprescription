@@ -19,6 +19,7 @@ export default function Layout() {
           <NavLink to="/patients">Patients</NavLink>
           <NavLink to="/prescriptions">Prescriptions</NavLink>
           <NavLink to="/prescriptions/new">+ New Prescription</NavLink>
+          <NavLink to="/inbox">Inbox</NavLink>
           <NavLink to="/pharmacies">Pharmacies</NavLink>
           {hasRole('admin') && <NavLink to="/admin">Admin</NavLink>}
         </nav>

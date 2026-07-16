@@ -4,6 +4,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { auditFromRequest } from '../services/audit.service.js';
 import { runSafetyChecks } from '../services/safety.service.js';
 import { transmitPrescription, cancelPrescription as cancelOnNetwork } from '../services/pharmacy.service.js';
+import { checkBenefit } from '../services/benefit.service.js';
 import { resolveMedicationByCui } from './medications.controller.js';
 
 const RX_SELECT = `
@@ -11,6 +12,7 @@ const RX_SELECT = `
   p.drug_name, p.dea_schedule, p.sig, p.quantity, p.quantity_unit, p.days_supply,
   p.refills, p.substitution_allowed, p.note_to_pharmacist, p.diagnosis_code,
   p.status, p.signed_at, p.transmitted_at, p.network_message_id, p.cancel_reason,
+  p.prior_auth_status, p.prior_auth_number, p.renewed_from_id,
   p.written_date, p.expires_on, p.created_at, p.updated_at,
   pt.first_name AS patient_first_name, pt.last_name AS patient_last_name, pt.date_of_birth AS patient_dob,
   u.first_name AS prescriber_first_name, u.last_name AS prescriber_last_name,
@@ -253,6 +255,46 @@ export const transmitPrescriptionHandler = asyncHandler(async (req, res) => {
     entityType: 'prescription',
     entityId: rx.id,
     metadata: { networkMessageId: result.networkMessageId },
+  });
+  res.json(await loadPrescription(rx.id, req.user.practice_id));
+});
+
+// ── POST /prescriptions/benefit-check  (Real-Time Prescription Benefit) ───────────
+// Body: { medicationId | rxnormCui, daysSupply? } — a point-of-prescribing preview.
+export const benefitCheck = asyncHandler(async (req, res) => {
+  let medication;
+  if (req.body.medicationId) {
+    const { rows } = await query('SELECT * FROM medications WHERE id = $1', [req.body.medicationId]);
+    medication = rows[0];
+    if (!medication) throw ApiError.badRequest('Medication not found');
+  } else if (req.body.rxnormCui) {
+    medication = await resolveMedicationByCui(String(req.body.rxnormCui));
+  } else {
+    throw ApiError.badRequest('medicationId or rxnormCui is required');
+  }
+  const benefit = await checkBenefit({ medication, daysSupply: req.body.daysSupply });
+  res.json(benefit);
+});
+
+// ── POST /prescriptions/:id/prior-auth  { status, priorAuthNumber? } ─────────────
+const PA_TRANSITIONS = ['required', 'initiated', 'pending', 'approved', 'denied', 'not_required'];
+export const updatePriorAuth = asyncHandler(async (req, res) => {
+  const status = req.body?.status;
+  if (!PA_TRANSITIONS.includes(status)) {
+    throw ApiError.badRequest(`status must be one of: ${PA_TRANSITIONS.join(', ')}`);
+  }
+  const rx = await loadPrescription(req.params.id, req.user.practice_id);
+  if (!rx) throw ApiError.notFound('Prescription not found');
+
+  await query(
+    'UPDATE prescriptions SET prior_auth_status = $2, prior_auth_number = COALESCE($3, prior_auth_number) WHERE id = $1',
+    [rx.id, status, req.body.priorAuthNumber || null],
+  );
+  await auditFromRequest(req, {
+    action: 'rx.prior_auth',
+    entityType: 'prescription',
+    entityId: rx.id,
+    metadata: { status },
   });
   res.json(await loadPrescription(rx.id, req.user.practice_id));
 });

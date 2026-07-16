@@ -12,8 +12,10 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', ctrl.listPrescriptions);
+router.post('/benefit-check', ctrl.benefitCheck);
 router.get('/:id', ctrl.getPrescription);
 router.get('/:id/safety-check', ctrl.previewSafetyChecks);
+router.post('/:id/prior-auth', requireRole('admin', 'prescriber', 'nurse', 'staff'), ctrl.updatePriorAuth);
 
 router.post('/', requireRole('admin', 'prescriber', 'nurse', 'staff'), validate(createPrescriptionSchema), ctrl.createPrescription);
 router.patch('/:id', requireRole('admin', 'prescriber', 'nurse', 'staff'), validate(updatePrescriptionSchema), ctrl.updatePrescription);
