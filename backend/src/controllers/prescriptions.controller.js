@@ -5,6 +5,7 @@ import { auditFromRequest } from '../services/audit.service.js';
 import { runSafetyChecks } from '../services/safety.service.js';
 import { transmitPrescription, cancelPrescription as cancelOnNetwork } from '../services/pharmacy.service.js';
 import { checkBenefit } from '../services/benefit.service.js';
+import { verifyToken } from '../utils/totp.js';
 import { resolveMedicationByCui } from './medications.controller.js';
 
 const RX_SELECT = `
@@ -180,6 +181,19 @@ export const signPrescription = asyncHandler(async (req, res) => {
   }
   if (rx.dea_schedule >= 2 && !req.user.dea_number) {
     throw ApiError.forbidden('A DEA number is required to prescribe controlled substances');
+  }
+  // EPCS-style two-factor: controlled substances require an enrolled
+  // authenticator and a valid one-time code at the moment of signing.
+  if (rx.dea_schedule >= 2) {
+    if (!req.user.totp_enabled) {
+      throw ApiError.forbidden(
+        'Two-factor authentication (EPCS) must be enabled to sign controlled substances. Enroll under Security.',
+      );
+    }
+    const { rows: trows } = await query('SELECT totp_secret FROM users WHERE id = $1', [req.user.id]);
+    if (!verifyToken(trows[0]?.totp_secret, req.body.otpToken)) {
+      throw ApiError.unauthorized('A valid two-factor code is required to sign controlled substances');
+    }
   }
 
   const { rows: medRows } = await query('SELECT * FROM medications WHERE id = $1', [rx.medication_id]);

@@ -14,6 +14,8 @@ import NewPrescription from './pages/NewPrescription.jsx';
 import Inbox from './pages/Inbox.jsx';
 import PrescriptionDetail from './pages/PrescriptionDetail.jsx';
 import Pharmacies from './pages/Pharmacies.jsx';
+import Reports from './pages/Reports.jsx';
+import Security from './pages/Security.jsx';
 import Admin from './pages/Admin.jsx';
 
 function Protected({ children }) {
@@ -48,6 +50,8 @@ export default function App() {
         <Route path="prescriptions/:id" element={<PrescriptionDetail />} />
         <Route path="inbox" element={<Inbox />} />
         <Route path="pharmacies" element={<Pharmacies />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="security" element={<Security />} />
         <Route path="admin" element={<Admin />} />
       </Route>
 

@@ -29,4 +29,9 @@ router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), ctr
 router.post('/reset-password', authLimiter, validate(resetPasswordSchema), ctrl.resetPassword);
 router.get('/me', authenticate, ctrl.me);
 
+// Two-factor (TOTP) enrollment for EPCS-style controlled-substance signing
+router.post('/2fa/setup', authenticate, ctrl.setupTwoFactor);
+router.post('/2fa/enable', authenticate, ctrl.enableTwoFactor);
+router.post('/2fa/disable', authenticate, ctrl.disableTwoFactor);
+
 export default router;

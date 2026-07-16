@@ -9,10 +9,17 @@ export default function PatientDetail() {
   const [allergy, setAllergy] = useState({ allergen: '', severity: 'moderate', reaction: '' });
   const [err, setErr] = useState('');
 
+  const [history, setHistory] = useState(null);
+
   const load = useCallback(async () => {
-    const [p, r] = await Promise.all([api(`/patients/${id}`), api(`/prescriptions?patientId=${id}`)]);
+    const [p, r, h] = await Promise.all([
+      api(`/patients/${id}`),
+      api(`/prescriptions?patientId=${id}`),
+      api(`/patients/${id}/medication-history`).catch(() => ({ data: [], counts: {} })),
+    ]);
     setPatient(p);
     setRxs(r.data);
+    setHistory(h);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -94,6 +101,29 @@ export default function PatientDetail() {
                     <td className="muted">{r.sig}</td>
                     <td><span className={`badge ${r.status}`}>{r.status}</span></td>
                     <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="card">
+          <h3>Medication history</h3>
+          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+            Consolidated view: this practice{history?.counts?.external ? ' plus external pharmacy/PBM fills (simulated)' : ''}.
+          </p>
+          {!history || history.data.length === 0 ? <p className="muted">No medication history.</p> : (
+            <table>
+              <thead><tr><th>Medication</th><th>Sig</th><th>Source</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody>
+                {history.data.map((m, i) => (
+                  <tr key={i}>
+                    <td>{m.drugName}</td>
+                    <td className="muted">{m.sig || '—'}</td>
+                    <td><span className={`badge ${m.source === 'internal' ? 'signed' : 'draft'}`}>{m.source === 'internal' ? 'This practice' : 'External'}</span></td>
+                    <td>{m.status}</td>
+                    <td>{m.date}</td>
                   </tr>
                 ))}
               </tbody>

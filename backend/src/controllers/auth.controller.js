@@ -5,6 +5,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { hashPassword, verifyPassword, generateOpaqueToken, sha256 } from '../utils/crypto.js';
 import { signAccessToken } from '../utils/tokens.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service.js';
+import { generateSecret, otpauthUri, verifyToken } from '../utils/totp.js';
 import { recordAudit } from '../services/audit.service.js';
 import { randomUUID } from 'node:crypto';
 
@@ -23,6 +24,7 @@ function publicUser(u) {
     npi: u.npi,
     deaNumber: u.dea_number,
     emailVerified: u.email_verified,
+    twoFactorEnabled: !!u.totp_enabled,
   };
 }
 
@@ -268,4 +270,44 @@ export const resetPassword = asyncHandler(async (req, res) => {
 // ── GET /auth/me ──────────────────────────────────────────────────────────────
 export const me = asyncHandler(async (req, res) => {
   res.json({ user: publicUser(req.user) });
+});
+
+// ── Two-factor (TOTP) enrollment — EPCS-style controlled-substance signing ────
+// POST /auth/2fa/setup → generate a secret and return the otpauth URI to scan
+export const setupTwoFactor = asyncHandler(async (req, res) => {
+  const { rows } = await query('SELECT totp_enabled FROM users WHERE id = $1', [req.user.id]);
+  if (rows[0]?.totp_enabled) throw ApiError.conflict('Two-factor authentication is already enabled');
+
+  const secret = generateSecret();
+  await query('UPDATE users SET totp_secret = $2 WHERE id = $1', [req.user.id, secret]);
+  res.json({
+    secret,
+    otpauthUri: otpauthUri(secret, { account: req.user.email }),
+    message: 'Add this secret to an authenticator app, then confirm a code to enable.',
+  });
+});
+
+// POST /auth/2fa/enable { token } → verify a code and turn 2FA on
+export const enableTwoFactor = asyncHandler(async (req, res) => {
+  const token = req.body?.token;
+  const { rows } = await query('SELECT totp_secret FROM users WHERE id = $1', [req.user.id]);
+  const secret = rows[0]?.totp_secret;
+  if (!secret) throw ApiError.badRequest('Start setup first (POST /auth/2fa/setup)');
+  if (!verifyToken(secret, token)) throw ApiError.badRequest('Invalid authentication code');
+
+  await query('UPDATE users SET totp_enabled = true WHERE id = $1', [req.user.id]);
+  await recordAudit({ userId: req.user.id, action: 'auth.2fa.enable', entityType: 'user', entityId: req.user.id });
+  res.json({ message: 'Two-factor authentication enabled.' });
+});
+
+// POST /auth/2fa/disable { token } → verify a code and turn 2FA off
+export const disableTwoFactor = asyncHandler(async (req, res) => {
+  const token = req.body?.token;
+  const { rows } = await query('SELECT totp_secret, totp_enabled FROM users WHERE id = $1', [req.user.id]);
+  if (!rows[0]?.totp_enabled) throw ApiError.badRequest('Two-factor authentication is not enabled');
+  if (!verifyToken(rows[0].totp_secret, token)) throw ApiError.badRequest('Invalid authentication code');
+
+  await query('UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE id = $1', [req.user.id]);
+  await recordAudit({ userId: req.user.id, action: 'auth.2fa.disable', entityType: 'user', entityId: req.user.id });
+  res.json({ message: 'Two-factor authentication disabled.' });
 });
