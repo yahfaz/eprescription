@@ -26,14 +26,29 @@ function publicUser(u) {
   };
 }
 
-async function issueVerificationEmail(user) {
+/**
+ * Base URL for email links (verification / password reset). An explicitly
+ * configured APP_PUBLIC_URL always wins (useful when the frontend lives on a
+ * different origin than the API). Otherwise we derive it from the incoming
+ * request — with `trust proxy` enabled this reflects the real external
+ * scheme/host behind Vercel or nginx, so links are never "localhost" in
+ * production even if APP_PUBLIC_URL was forgotten.
+ */
+function publicBaseUrl(req) {
+  if (process.env.APP_PUBLIC_URL) return process.env.APP_PUBLIC_URL.replace(/\/+$/, '');
+  const host = req.get('host');
+  if (host) return `${req.protocol}://${host}`;
+  return env.email.appPublicUrl;
+}
+
+async function issueVerificationEmail(user, req) {
   const raw = generateOpaqueToken();
   await query(
     `INSERT INTO email_tokens (user_id, purpose, token_hash, expires_at)
      VALUES ($1, 'verify_email', $2, $3)`,
     [user.id, sha256(raw), new Date(Date.now() + VERIFY_TTL_MS)],
   );
-  const link = `${env.email.appPublicUrl}/verify-email?token=${raw}`;
+  const link = `${publicBaseUrl(req)}/verify-email?token=${raw}`;
   await sendVerificationEmail(user.email, user.first_name, link);
 }
 
@@ -73,15 +88,15 @@ export const register = asyncHandler(async (req, res) => {
          (practice_id, email, password_hash, first_name, last_name, role, npi, dea_number, state_license, phone, email_verified)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
-      [resolvedPracticeId, email, passwordHash, firstName, lastName, role, npi || null, deaNumber || null, stateLicense || null, phone || null, env.email.autoVerify],
+      [resolvedPracticeId, email, passwordHash, firstName, lastName, role, npi || null, deaNumber || null, stateLicense || null, phone || null, !env.email.requireVerification],
     );
     return rows[0];
   });
 
-  // With AUTO_VERIFY_EMAIL enabled the account is usable immediately and no
-  // verification email is sent; otherwise send the verification link.
-  if (!env.email.autoVerify) {
-    await issueVerificationEmail(user);
+  // Only send a verification email when verification is actually enforced
+  // (SMTP configured and auto-verify off); otherwise the account is usable now.
+  if (env.email.requireVerification) {
+    await issueVerificationEmail(user, req);
   }
   await recordAudit({
     userId: user.id,
@@ -94,9 +109,9 @@ export const register = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({
-    message: env.email.autoVerify
-      ? 'Account created. You can now log in.'
-      : 'Account created. Check your email to verify your address before logging in.',
+    message: env.email.requireVerification
+      ? 'Account created. Check your email to verify your address before logging in.'
+      : 'Account created. You can now log in.',
     user: publicUser(user),
   });
 });
@@ -130,7 +145,7 @@ export const resendVerification = asyncHandler(async (req, res) => {
   const user = rows[0];
   // Always respond the same way to avoid leaking which emails exist
   if (user && !user.email_verified) {
-    await issueVerificationEmail(user);
+    await issueVerificationEmail(user, req);
   }
   res.json({ message: 'If an unverified account exists for that email, a new verification link has been sent.' });
 });
@@ -145,7 +160,9 @@ export const login = asyncHandler(async (req, res) => {
     throw ApiError.unauthorized('Invalid email or password');
   }
   if (!user.is_active) throw ApiError.forbidden('Account is deactivated');
-  if (!user.email_verified) throw ApiError.forbidden('Please verify your email address before logging in');
+  if (env.email.requireVerification && !user.email_verified) {
+    throw ApiError.forbidden('Please verify your email address before logging in');
+  }
 
   const accessToken = signAccessToken(user);
   const refreshToken = await issueRefreshToken(user, req);
@@ -216,7 +233,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
        VALUES ($1, 'password_reset', $2, $3)`,
       [user.id, sha256(raw), new Date(Date.now() + RESET_TTL_MS)],
     );
-    const link = `${env.email.appPublicUrl}/reset-password?token=${raw}`;
+    const link = `${publicBaseUrl(req)}/reset-password?token=${raw}`;
     await sendPasswordResetEmail(user.email, user.first_name, link);
   }
   res.json({ message: 'If an account exists for that email, a password reset link has been sent.' });

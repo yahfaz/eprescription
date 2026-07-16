@@ -275,3 +275,65 @@ BEGIN
        FOR EACH ROW EXECUTE FUNCTION set_updated_at();', t);
   END LOOP;
 END $$;
+
+-- ============================================================================
+--  Feature-parity additions (DoseSpot / DrFirst / Surescripts style)
+--  Idempotent: safe to re-run on an existing database.
+-- ============================================================================
+
+DO $$ BEGIN
+  CREATE TYPE prior_auth_status AS ENUM ('not_required','required','initiated','pending','approved','denied');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE renewal_status AS ENUM ('pending','approved','denied');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Electronic prior authorization (ePA) fields on prescriptions
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS prior_auth_status prior_auth_status NOT NULL DEFAULT 'not_required';
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS prior_auth_number TEXT;
+-- Link a prescription created by renewing/continuing an earlier one
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS renewed_from_id UUID REFERENCES prescriptions(id) ON DELETE SET NULL;
+
+-- ─── Medication favorites (quick-prescribe lists, per prescriber) ───────────────
+CREATE TABLE IF NOT EXISTS medication_favorites (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  practice_id    UUID REFERENCES practices(id) ON DELETE CASCADE,
+  medication_id  UUID REFERENCES medications(id) ON DELETE SET NULL,
+  rxnorm_cui     TEXT,
+  label          TEXT,                          -- optional friendly name
+  drug_name      TEXT NOT NULL,
+  sig            TEXT,
+  quantity       NUMERIC(10,2),
+  quantity_unit  TEXT DEFAULT 'each',
+  days_supply    INTEGER,
+  refills        INTEGER DEFAULT 0,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_favorites_user ON medication_favorites(user_id);
+
+-- ─── Renewal / refill authorization requests (RxRenewal inbox) ──────────────────
+CREATE TABLE IF NOT EXISTS renewal_requests (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  practice_id      UUID NOT NULL REFERENCES practices(id) ON DELETE CASCADE,
+  patient_id       UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  prescriber_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+  prescription_id  UUID REFERENCES prescriptions(id) ON DELETE SET NULL,
+  pharmacy_id      UUID REFERENCES pharmacies(id) ON DELETE SET NULL,
+  drug_name        TEXT NOT NULL,
+  sig              TEXT,
+  quantity         NUMERIC(10,2),
+  quantity_unit    TEXT DEFAULT 'each',
+  days_supply      INTEGER,
+  refills          INTEGER DEFAULT 0,
+  requested_by     TEXT,                        -- pharmacy name / source of the request
+  note             TEXT,
+  status           renewal_status NOT NULL DEFAULT 'pending',
+  responded_at     TIMESTAMPTZ,
+  responded_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  resulting_rx_id  UUID REFERENCES prescriptions(id) ON DELETE SET NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_renewals_practice_status ON renewal_requests(practice_id, status);
+CREATE INDEX IF NOT EXISTS idx_renewals_patient ON renewal_requests(patient_id);
